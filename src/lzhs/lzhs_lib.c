@@ -214,6 +214,9 @@ void lzhs_encode(const char *infile, const char *outfile) {
 
 int lzhs_decode(MFILE *in_file, const char *out_path){
 	struct lzhs_header *header = mdata(in_file, struct lzhs_header);
+	
+	header->uncompressedSize = header->uncompressedSize * 2;	// durt hack: LZHS don't unpack all data
+
 	printf("\n---LZHS details---\n");
 	printf("Compressed:\t%d\n", header->compressedSize);
 	printf("Uncompressed:\t%d\n", header->uncompressedSize);
@@ -231,7 +234,7 @@ int lzhs_decode(MFILE *in_file, const char *out_path){
 		fprintf(stderr, "Cannot open output file %s\n", out_path);
 		return -1;
 	}
-	mfile_map(out_file, header->uncompressedSize);
+	mfile_map(out_file, header->uncompressedSize / 2);	// durt hack: LZHS don't unpack all data
 
 	uint8_t *in_bytes = mdata(in_file, uint8_t);
 	uint8_t *out_bytes = mdata(out_file, uint8_t);
@@ -266,9 +269,13 @@ int lzhs_decode(MFILE *in_file, const char *out_path){
 	// We don't need the temp memory anymore
 	munmap(tmp, header->uncompressedSize);	
 	
+	out_cur.size = header->uncompressedSize / 2;			// durt hack: LZHS don't unpack all data
+
 	printf("[LZHS] Converting Thumb => ARM...\n");
 	ARMThumb_Convert(out_bytes, out_cur.size, 0, 0);
 	
+	header->uncompressedSize = header->uncompressedSize / 2;	// durt hack: LZHS don't unpack all data
+
 	printf("[LZHS] Calculating checksum...\n");
 	uint8_t checksum = lzhs_calc_checksum(out_bytes, out_cur.size);
 	printf("Calculated checksum = 0x%x\n", checksum);

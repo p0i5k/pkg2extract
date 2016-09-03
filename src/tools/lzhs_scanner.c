@@ -10,8 +10,11 @@
 
 void scan_lzhs(const char *filename, int extract) {
 	int fsize, pos;
-	
+	const int  FIRST_PART_SIZE = 0x100000;
+
 	struct lzhs_header *header = NULL;
+	int header_size = sizeof(*header);
+	uint32_t compressedSize;
 	char *outname, *outdecode;
 
 	MFILE *file = mopen(filename, O_RDONLY);
@@ -20,50 +23,83 @@ void scan_lzhs(const char *filename, int extract) {
 		exit(1);
 	}
 
-	int i, count = 0;
-	for (i = 0; i<msize(file); i += sizeof(*header)) {
-		header = (struct lzhs_header *)(mdata(file, uint8_t) + i);
-		if (_is_lzhs_mem(header)) {
-			count++;
-			off_t fileOff = moff(file, header);
-			if(!(fileOff % MTK_LOADER_OFF)){
-				printf("Found possible mtk loader at 0x%x\n", fileOff);
-			} else if(!(fileOff % MTK_UBOOT_OFF)){
-				printf("Found possible mtk uboot at 0x%x\n", fileOff);
-			} else {
-				printf("Found possible LZHS header at 0x%x\n", fileOff);
-			}
+	if (extract) {
+		char *dirn = my_dirname(filename);
+		char *filen = my_basename(filename);
 
-			if (extract) {
-				char *dirn = my_dirname(filename);
-				char *filen = my_basename(filename);
-				asprintf(&outname, "%s/%s_file%d.lzhs", dirn, filen, count);
-								
-				printf("Extracting to %s\n", outname);
-				
-				MFILE *out = mfopen(outname, "w+");
-				if (out == NULL) {
-					err_exit("Cannot open file %s for writing\n", outname);
+		asprintf(&outname, "%s/%s_file%03d.unlzhs", dirn, filen, 0);
+
+		MFILE *out = mfopen(outname, "w+");
+		if (out == NULL) {
+			err_exit("Cannot open file %s for writing\n", outname);
+		}
+
+		mfile_map(out, FIRST_PART_SIZE);
+
+		memcpy(
+			mdata(out, void),
+			mdata(file, void),
+			FIRST_PART_SIZE
+		);
+
+		free(outname);
+		mclose(out);
+		free(dirn);
+		free(filen);
+	}
+
+	int i, count = 0, count_internal;
+	for (i = FIRST_PART_SIZE + header_size; i<msize(file); i += header_size) {
+		header = (struct lzhs_header *)(mdata(file, uint8_t) + i - header_size );
+		if (_is_lzhs_mem(header)) {
+			count_internal = header->checksum;	// first LZHS header contain number of block in checksum
+			compressedSize = header->compressedSize;
+			header = (struct lzhs_header *)(mdata(file, uint8_t) + i);
+			if (_is_lzhs_mem(header) && compressedSize == (header->compressedSize + header_size)) {
+				count++;
+
+				printf("---------------------------------------------------\n");
+				off_t fileOff = moff(file, header);
+				if(!(fileOff % MTK_LOADER_OFF)){
+					printf("Found possible mtk loader at 0x%x\n", fileOff);
+				} else if(!(fileOff % MTK_UBOOT_OFF)){
+					printf("Found possible mtk uboot at 0x%x\n", fileOff);
+				} else {
+					printf("Found possible LZHS header at 0x%x\n", fileOff);
 				}
+
+				if (extract) {
+					char *dirn = my_dirname(filename);
+					char *filen = my_basename(filename);
+
+					asprintf(&outname, "%s/%s_file%03d.lzhs", dirn, filen, count_internal);
+
+					printf("Extracting to %s\n", outname);
+
+					MFILE *out = mfopen(outname, "w+");
+					if (out == NULL) {
+						err_exit("Cannot open file %s for writing\n", outname);
+					}
 				
-				mfile_map(out, sizeof(*header) + header->compressedSize);
+					mfile_map(out, sizeof(*header) + header->compressedSize);
 				
-				memcpy(
-					mdata(out, void),
-					(uint8_t *)header,
-					sizeof(*header) + header->compressedSize
-				);
+					memcpy(
+						mdata(out, void),
+						(uint8_t *)header,
+						sizeof(*header) + header->compressedSize
+					);
+					
+					free(outname);
+
+					asprintf(&outdecode, "%s/%s_file%03d.unlzhs", dirn, filen, count_internal);
+					lzhs_decode(out, outdecode);
 				
-				free(outname);
+					mclose(out);
 				
-				asprintf(&outdecode, "%s/%s_file%d.unlzhs", dirn, filen, count);
-				lzhs_decode(out, outdecode);
-				
-				mclose(out);
-				
-				free(outdecode);
-				free(dirn);
-				free(filen);
+					free(outdecode);
+					free(dirn);
+					free(filen);
+				}
 			}
 		}
 	}
