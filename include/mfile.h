@@ -10,8 +10,8 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 
-#define MFILE_ANON(var, size) \
-	void *var = mmap(0, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, 0, 0)
+#define MFILE_ANON(size) \
+	mmap(0, size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, 0, 0)
 
 /* Gets the size of the memory mapped file */
 #define msize(mfile) mfile->statBuf.st_size
@@ -20,7 +20,7 @@
 /* Gets the file handler (for mfopen) */
 #define mfh(mfile) mfile->fh
 /* Gets the file offset */
-#define moff(mfile, ptr) (off_t)((uintptr_t)ptr - (uintptr_t)mfile->pMem)
+#define moff(mfile, ptr) (off_t)((uintptr_t)ptr - (uintptr_t)(mfile->pMem))
 
 #define mwriteat(mfile, off, ptr, size) \
 	memcpy( \

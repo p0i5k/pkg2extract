@@ -24,6 +24,7 @@
 
 #include "epk1.h"		/* EPK v1 */
 #include "epk2.h"		/* EPK v2 and v3 */
+#include "hisense.h"	/* Hisense DTV */
 #include "cramfs/cramfs.h"	/* CRAMFS */
 #include "cramfs/cramfsswap.h"
 #include "lz4/lz4.h"	/* LZ4 */
@@ -41,35 +42,6 @@
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #endif
-
-char *remove_ext(const char *mystr) {
-	char *retstr, *lastdot;
-	if (mystr == NULL)
-		return NULL;
-	if ((retstr = (char *)malloc(strlen(mystr) + 1)) == NULL)
-		return NULL;
-	strcpy(retstr, mystr);
-	lastdot = strrchr(retstr, '.');
-	if (lastdot != NULL)
-		*lastdot = '\0';
-	return retstr;
-}
-
-char *get_ext(const char *mystr) {
-	char *retstr, *lastdot;
-	if (mystr == NULL)
-		return NULL;
-	if ((retstr = (char *)malloc(strlen(mystr) + 1)) == NULL)
-		return NULL;
-	lastdot = strrchr(mystr, '.');
-	if (lastdot != NULL) {
-		sprintf(retstr, "%s", lastdot + 1);
-		int i;
-		for (i = 0; retstr[i]; i++)
-			retstr[i] = tolower(retstr[i]);
-	}
-	return retstr;
-}
 
 struct config_opts_t config_opts;
 
@@ -90,6 +62,11 @@ int handle_file(char *file, struct config_opts_t *config_opts) {
 		extractEPK2file(file, config_opts);
 	} else if(isFileEPK3(file)) {
 		extractEPK3file(file, config_opts);
+	} else if((mf=is_hisense(file))){
+		extract_hisense(mf, config_opts);
+	} else if((mf=is_ext4_lzhs(file))){
+		asprintf(&dest_file, "%s/%s.ext4", dest_dir, file_name);
+		extract_ext4_lzhs(mf, dest_file);
 	/* LZ4 */
 	} else if ((mf=is_lz4(file))) {
 		asprintf(&dest_file, "%s/%s.unlz4", dest_dir, file_name);
@@ -182,7 +159,7 @@ int handle_file(char *file, struct config_opts_t *config_opts) {
 	} else if ((mf=is_lzhs(file))) {
 		asprintf(&dest_file, "%s/%s.unlzhs", dest_dir, file_name);
 		printf("UnLZHS %s to %s\n", file, dest_file);
-		lzhs_decode(mf, dest_file);
+		lzhs_decode(mf, 0, dest_file, NULL);
 	/* MTK TZFW (TrustZone Firmware) */
 	} else if (!strcmp(file_name, "tzfw.pak") && (mf=is_elf(file))) {
 		printf("Splitting mtk tzfw...\n");
@@ -204,7 +181,7 @@ int handle_file(char *file, struct config_opts_t *config_opts) {
 }
 
 int main(int argc, char *argv[]) {
-	printf("\nLG Electronics digital TV firmware package (EPK) extractor 4.3 by sirius (http://openlgtv.org.ru)\n\n");
+	printf("\nLG Electronics digital TV firmware package (EPK) extractor version 4.4 by sirius (http://openlgtv.org.ru)\n\n");
 	if (argc < 2) {
 		printf("Thanks to xeros, tbage, jenya, Arno1, rtokarev, cronix, lprot, Smx and all other guys from openlgtv project for their kind assistance.\n\n");
 		printf("Usage: epk2extract [-options] FILENAME\n\n");

@@ -20,8 +20,24 @@ void extract_mtk_1bl(MFILE *in, const char *outname) {
 		err_exit("Can't open file %s for writing (%s)\n", outname, strerror(errno));
 	}
 
-	mfile_map(out, MTK_PBL_SIZE);
-	memcpy(mdata(out, uint8_t), mdata(in, uint8_t), MTK_PBL_SIZE);
+	size_t pbl_size = 0;
+	
+	uint8_t *data = mdata(in, uint8_t);
+	if(memcmp(data + 0x100, MTK_PBL_MAGIC, strlen(MTK_PBL_MAGIC)) == 0)
+		pbl_size = MTK_PBL_SIZE;
+	else if(memcmp(data + 0x100, MTK_ROM_MAGIC, strlen(MTK_ROM_MAGIC)) == 0)
+		pbl_size = MTK_ROM_SIZE;
+	else
+		err_exit("Cannot detect PBL size\n");
+
+	printf("[MTK] PBL Size: 0x%08X\n", pbl_size);
+
+	mfile_map(out, pbl_size);
+	memcpy(
+		mdata(out, uint8_t),
+		mdata(in, uint8_t),
+		pbl_size
+	);
 
 	mclose(out);
 	mclose(in);
@@ -74,14 +90,21 @@ MFILE *is_mtk_boot(const char *filename) {
 		err_exit("Can't open file %s\n", filename);
 	}
 	if (
-		(msize(file) < MTK_PBL_SIZE) ||
-		(memcmp(data + 0x100, MTK_PBL_MAGIC, strlen(MTK_PBL_MAGIC)) != 0)
+		(msize(file) >= MTK_PBL_SIZE) &&
+		(memcmp(data + 0x100, MTK_PBL_MAGIC, strlen(MTK_PBL_MAGIC)) == 0)
 	){
+		printf("Found valid PBL magic: "MTK_PBL_MAGIC"\n");
+	} else if (
+		(msize(file) >= MTK_ROM_SIZE) &&
+		(memcmp(data + 0x100, MTK_ROM_MAGIC, strlen(MTK_ROM_MAGIC)) == 0)
+	){
+		printf("Found valid PBL/ROM magic: "MTK_ROM_MAGIC"\n");
+	} else {
 		mclose(file);
 		return NULL;
 	}
 	
-	printf("Found valid PBL magic: "MTK_PBL_MAGIC"\n");
+	
 	return file;
 }
 
